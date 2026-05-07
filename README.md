@@ -30,7 +30,7 @@ gaia-tools/
 ### Requisitos
 
 - Docker y Docker Compose instalados en el servidor.
-- Puertos `3000` (frontend) y `8000` (backend) disponibles.
+- Puertos `3001` (frontend) y `8000` (backend) disponibles.
 
 ### Desde GitHub (producción — NAS, servidor remoto)
 
