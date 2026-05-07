@@ -30,40 +30,31 @@ gaia-tools/
 ### Requisitos
 
 - Docker y Docker Compose instalados en el servidor.
-- Puertos `3000` y `8000` disponibles (configurables en `.env`).
+- Puertos `3000` (frontend) y `8000` (backend) disponibles.
 
-### 1. Configurar variables de entorno
+### Desde GitHub (producción — NAS, servidor remoto)
 
-```bash
-cp .env.example .env
-# Editar .env si se quieren cambiar los puertos o el tamaño máximo de archivo
-```
-
-### 2a. Despliegue local (desde código fuente)
-
-Usar cuando se tiene el repositorio clonado en la máquina:
-
-```bash
-docker compose -f docker-compose.local.yaml up --build -d
-```
-
-### 2b. Despliegue desde GitHub
-
-Usar en producción (NAS, servidor remoto). Un solo comando descarga el script y despliega todo:
+Un solo comando descarga el script de despliegue y levanta los servicios directamente desde el repositorio de GitHub, sin necesidad de clonar el código:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andresdavidhr/gaia-tools/main/deploy.sh | bash
 ```
 
-O si ya tienes el script descargado:
+El frontend queda disponible en `http://<IP>:3000`.
+
+### Local (desarrollo)
+
+Con el repositorio clonado en la máquina:
 
 ```bash
-bash deploy.sh
+docker compose -f docker-compose.local.yaml up --build -d
 ```
 
-El script crea `.env` con valores por defecto si no existe, y lanza Docker Compose apuntando al repositorio de GitHub — no es necesario clonar el código.
+### Actualizar a la última versión
 
-> Para actualizar a la última versión vuelve a ejecutar `bash deploy.sh`.
+```bash
+curl -fsSL https://raw.githubusercontent.com/andresdavidhr/gaia-tools/main/deploy.sh | bash
+```
 
 ### Ver logs
 
@@ -71,27 +62,11 @@ El script crea `.env` con valores por defecto si no existe, y lanza Docker Compo
 docker compose -f docker-compose.github.yaml logs -f
 ```
 
-### Actualizar a la última versión
-
-```bash
-docker compose -f docker-compose.github.yaml up --build -d
-```
-
-Docker detecta los cambios en el repositorio y reconstruye solo lo necesario.
-
 ### Parar los servicios
 
 ```bash
 docker compose -f docker-compose.github.yaml down
 ```
-
-## Variables de entorno
-
-| Variable | Por defecto | Descripción |
-|----------|-------------|-------------|
-| `BACKEND_PORT` | `8000` | Puerto externo del backend |
-| `FRONTEND_PORT` | `3000` | Puerto externo del frontend (nginx) |
-| `MAX_FILE_SIZE_MB` | `100` | Tamaño máximo de archivo subido |
 
 ## Documentación técnica
 
