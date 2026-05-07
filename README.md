@@ -49,15 +49,21 @@ docker compose -f docker-compose.local.yaml up --build -d
 
 ### 2b. Despliegue desde GitHub
 
-Usar en producción (NAS, servidor remoto). Docker descarga y construye directamente desde el repositorio de GitHub sin necesidad de clonar el código:
+Usar en producción (NAS, servidor remoto). Un solo comando descarga el script y despliega todo:
 
 ```bash
-docker compose -f docker-compose.github.yaml up --build -d
+curl -fsSL https://raw.githubusercontent.com/andresdavidhr/gaia-tools/main/deploy.sh | bash
 ```
 
-> El flag `--build` es necesario la primera vez o cuando haya cambios en el código. Las siguientes veces sin cambios se puede omitir.
+O si ya tienes el script descargado:
 
-Al arrancar, el backend ejecuta automáticamente los tests unitarios. Si alguno falla, el contenedor se detiene y el despliegue no continúa (`restart: no`).
+```bash
+bash deploy.sh
+```
+
+El script crea `.env` con valores por defecto si no existe, y lanza Docker Compose apuntando al repositorio de GitHub — no es necesario clonar el código.
+
+> Para actualizar a la última versión vuelve a ejecutar `bash deploy.sh`.
 
 ### Ver logs
 
