@@ -3,7 +3,7 @@ version: "3.8"
 services:
   gaia-backend:
     build:
-      context: https://github.com/andresdavidh11/gaia-tools.git#main:backend
+      context: https://github.com/andresdavidhr/gaia-tools.git#main:backend
       dockerfile: Dockerfile
     container_name: gaia-backend
     restart: unless-stopped
@@ -16,7 +16,7 @@ services:
 
   gaia-frontend:
     build:
-      context: https://github.com/andresdavidh11/gaia-tools.git#main:frontend
+      context: https://github.com/andresdavidhr/gaia-tools.git#main:frontend
       dockerfile: Dockerfile
     container_name: gaia-frontend
     restart: unless-stopped
