@@ -1,10 +1,26 @@
-version: "3.8"
-
 services:
   gaia-backend:
     build:
-      context: https://github.com/andresdavidhr/gaia-tools.git#main:backend
-      dockerfile: Dockerfile
+      context: /tmp
+      dockerfile_inline: |
+        FROM alpine/git AS source
+        RUN git clone --depth=1 --branch main https://github.com/andresdavidhr/gaia-tools.git /repo
+
+        FROM python:3.12-slim
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+            ffmpeg \
+            pandoc \
+            && rm -rf /var/lib/apt/lists/*
+        WORKDIR /app
+        COPY --from=source /repo/backend/requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+        COPY --from=source /repo/backend/app/ ./app/
+        COPY --from=source /repo/backend/tests/ ./tests/
+        COPY --from=source /repo/backend/pytest.ini ./
+        COPY --from=source /repo/backend/entrypoint.sh ./
+        RUN chmod +x entrypoint.sh
+        EXPOSE 8000
+        CMD ["./entrypoint.sh"]
     container_name: gaia-backend
     restart: unless-stopped
     ports:
@@ -13,17 +29,36 @@ services:
       - gaia-downloads:/tmp
     environment:
       - MAX_FILE_SIZE_MB=100
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   gaia-frontend:
     build:
-      context: https://github.com/andresdavidhr/gaia-tools.git#main:frontend
-      dockerfile: Dockerfile
+      context: /tmp
+      dockerfile_inline: |
+        FROM alpine/git AS source
+        RUN git clone --depth=1 --branch main https://github.com/andresdavidhr/gaia-tools.git /repo
+
+        FROM node:20-alpine AS build
+        WORKDIR /app
+        COPY --from=source /repo/frontend .
+        RUN npm ci && npm run build
+
+        FROM nginx:alpine
+        COPY --from=build /app/dist /usr/share/nginx/html
+        COPY --from=source /repo/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+        EXPOSE 80
     container_name: gaia-frontend
     restart: unless-stopped
     ports:
       - "3001:80"
     depends_on:
-      - gaia-backend
+      gaia-backend:
+        condition: service_healthy
 
 volumes:
   gaia-downloads:
