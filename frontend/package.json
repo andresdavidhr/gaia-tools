@@ -8,9 +8,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "cron-parser": "^5.5.0",
+    "cronstrue": "^3.14.0",
+    "diff": "^9.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.28.0",
+    "sql-formatter": "^15.8.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
