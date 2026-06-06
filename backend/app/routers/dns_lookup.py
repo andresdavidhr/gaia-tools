@@ -1,5 +1,6 @@
 import dns.asyncresolver
 import dns.exception
+import dns.resolver
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -34,9 +35,9 @@ async def lookup(req: DNSRequest):
     try:
         answers = await dns.asyncresolver.resolve(domain, rtype)
         records = [_record_str(r, rtype) for r in answers]
-    except dns.exception.NXDOMAIN:
+    except dns.resolver.NXDOMAIN:
         raise HTTPException(400, f"Domain '{domain}' not found.")
-    except dns.exception.NoAnswer:
+    except dns.resolver.NoAnswer:
         return {"domain": domain, "record_type": rtype, "records": []}
     except dns.exception.DNSException as e:
         raise HTTPException(400, str(e))
