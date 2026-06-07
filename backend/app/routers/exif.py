@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from PIL import ExifTags, Image
 
 router = APIRouter()
@@ -9,10 +9,6 @@ CAMERA_TAGS = {"Make", "Model", "Software", "ExifVersion", "ISOSpeedRatings",
                "FNumber", "ExposureTime", "FocalLength", "Flash", "WhiteBalance",
                "MeteringMode", "ExposureMode", "ExposureProgram"}
 DATE_TAGS   = {"DateTime", "DateTimeOriginal", "DateTimeDigitized"}
-GPS_TAGS    = {"GPSLatitude", "GPSLongitude", "GPSAltitude",
-               "GPSLatitudeRef", "GPSLongitudeRef", "GPSAltitudeRef", "GPSImgDirection"}
-
-REVERSED = {v: k for k, v in ExifTags.TAGS.items()}
 
 
 def _gps_decimal(coord, ref):
@@ -26,10 +22,21 @@ def _gps_decimal(coord, ref):
         return None
 
 
+def _safe_str(val):
+    if isinstance(val, bytes):
+        return val.decode(errors="replace")
+    if hasattr(val, "numerator"):
+        return str(round(float(val.numerator) / float(val.denominator), 4))
+    return str(val)
+
+
 @router.post("/")
 async def extract(file: UploadFile = File(...)):
     data = await file.read()
-    img = Image.open(BytesIO(data))
+    try:
+        img = Image.open(BytesIO(data))
+    except Exception:
+        raise HTTPException(422, "Cannot open image.")
 
     image_info = {
         "Width": img.width,
@@ -38,29 +45,34 @@ async def extract(file: UploadFile = File(...)):
         "Mode": img.mode,
     }
 
-    raw = img._getexif() or {}
-    tags = {ExifTags.TAGS.get(k, k): v for k, v in raw.items()}
+    try:
+        raw = img._getexif() or {} if hasattr(img, "_getexif") else {}
+    except Exception:
+        raw = {}
+
+    tags = {ExifTags.TAGS.get(k, str(k)): v for k, v in raw.items()}
 
     camera, date, gps = {}, {}, {}
     for name, val in tags.items():
         if name in CAMERA_TAGS:
-            if hasattr(val, "numerator"):
-                val = round(float(val.numerator) / float(val.denominator), 4)
-            camera[name] = str(val)
+            camera[name] = _safe_str(val)
         elif name in DATE_TAGS:
-            date[name] = str(val)
+            date[name] = _safe_str(val)
 
-    raw_gps = tags.get("GPSInfo", {})
-    if isinstance(raw_gps, dict):
-        gps_named = {ExifTags.GPSTAGS.get(k, k): v for k, v in raw_gps.items()}
-        lat = _gps_decimal(gps_named.get("GPSLatitude", ()), gps_named.get("GPSLatitudeRef", ""))
-        lon = _gps_decimal(gps_named.get("GPSLongitude", ()), gps_named.get("GPSLongitudeRef", ""))
-        if lat is not None:
-            gps["Latitude"] = lat
-        if lon is not None:
-            gps["Longitude"] = lon
-        if "GPSAltitude" in gps_named:
-            a = gps_named["GPSAltitude"]
-            gps["Altitude"] = round(float(a.numerator) / float(a.denominator), 2) if hasattr(a, "numerator") else float(a)
+    try:
+        raw_gps = tags.get("GPSInfo", {})
+        if isinstance(raw_gps, dict):
+            gps_named = {ExifTags.GPSTAGS.get(k, k): v for k, v in raw_gps.items()}
+            lat = _gps_decimal(gps_named.get("GPSLatitude", ()), gps_named.get("GPSLatitudeRef", ""))
+            lon = _gps_decimal(gps_named.get("GPSLongitude", ()), gps_named.get("GPSLongitudeRef", ""))
+            if lat is not None:
+                gps["Latitude"] = lat
+            if lon is not None:
+                gps["Longitude"] = lon
+            if "GPSAltitude" in gps_named:
+                a = gps_named["GPSAltitude"]
+                gps["Altitude"] = round(float(a.numerator) / float(a.denominator), 2) if hasattr(a, "numerator") else float(a)
+    except Exception:
+        pass
 
     return {"Image": image_info, "Camera": camera, "GPS": gps, "Date": date}

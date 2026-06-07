@@ -41,5 +41,7 @@ async def compress(
             media_type = "application/x-tar"
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Compression failed: {type(e).__name__}: {e}")
 
     return FileResponse(path, media_type=media_type, filename=filename)
