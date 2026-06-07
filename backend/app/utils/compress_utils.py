@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import tarfile
-import tempfile
 import zipfile
 
 import pyzipper
@@ -16,38 +15,29 @@ def _validate_size(files: list[tuple[str, bytes]]) -> None:
             raise ValueError(f"'{name}' exceeds the 100 MB limit.")
 
 
-def create_zip(files: list[tuple[str, bytes]], password: str | None) -> str:
+def create_zip(files: list[tuple[str, bytes]], password: str | None) -> bytes:
     _validate_size(files)
-    suffix = ".zip"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        path = tmp.name
-
+    buf = io.BytesIO()
     if password:
-        with pyzipper.AESZipFile(path, "w", compression=pyzipper.ZIP_DEFLATED,
+        with pyzipper.AESZipFile(buf, "w", compression=pyzipper.ZIP_DEFLATED,
                                  encryption=pyzipper.WZ_AES) as zf:
             zf.setpassword(password.encode())
             for name, data in files:
                 zf.writestr(name, data)
     else:
-        with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for name, data in files:
                 zf.writestr(name, data)
+    return buf.getvalue()
 
-    return path
 
-
-def create_tar(files: list[tuple[str, bytes]], compression: str) -> str:
+def create_tar(files: list[tuple[str, bytes]], compression: str) -> bytes:
     _validate_size(files)
-    ext_map = {"": ".tar", "gz": ".tar.gz", "bz2": ".tar.bz2"}
     mode_map = {"": "w", "gz": "w:gz", "bz2": "w:bz2"}
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext_map[compression]) as tmp:
-        path = tmp.name
-
-    with tarfile.open(path, mode_map[compression]) as tf:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode=mode_map[compression]) as tf:
         for name, data in files:
             info = tarfile.TarInfo(name=name)
             info.size = len(data)
             tf.addfile(info, io.BytesIO(data))
-
-    return path
+    return buf.getvalue()

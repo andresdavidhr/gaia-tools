@@ -1,8 +1,7 @@
-import tempfile
 from io import BytesIO
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from PIL import Image
 
 router = APIRouter()
@@ -19,13 +18,13 @@ def _open_and_ext(data: bytes, filename: str):
     return img, ext
 
 
-def _save(img: Image.Image, ext: str, name: str):
+def _encode(img: Image.Image, ext: str) -> tuple[bytes, str]:
     fmt = SAVE_FORMAT.get(ext, "PNG")
     if fmt == "JPEG" and img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
-        img.save(tmp.name, format=fmt, optimize=True)
-        return tmp.name, MEDIA_TYPES.get(ext, "image/png"), name
+    buf = BytesIO()
+    img.save(buf, format=fmt, optimize=True)
+    return buf.getvalue(), MEDIA_TYPES.get(ext, "image/png")
 
 
 @router.post("/resize")
@@ -44,8 +43,12 @@ async def resize_image(
         img.thumbnail((width, height), Image.LANCZOS)
     else:
         img = img.resize((width, height), Image.LANCZOS)
-    path, media_type, fname = _save(img, ext, f"resized.{ext}")
-    return FileResponse(path, media_type=media_type, filename=fname)
+    content, media_type = _encode(img, ext)
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="resized.{ext}"'},
+    )
 
 
 @router.post("/crop")
@@ -63,5 +66,9 @@ async def crop_image(
     if x + width > img.width or y + height > img.height:
         raise HTTPException(400, f"Crop area exceeds image bounds ({img.width}×{img.height}).")
     img = img.crop((x, y, x + width, y + height))
-    path, media_type, fname = _save(img, ext, f"cropped.{ext}")
-    return FileResponse(path, media_type=media_type, filename=fname)
+    content, media_type = _encode(img, ext)
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="cropped.{ext}"'},
+    )

@@ -1,8 +1,7 @@
-import tempfile
 from io import BytesIO
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from PIL import Image
 
 router = APIRouter()
@@ -31,28 +30,24 @@ async def optimize(
         img = img.convert("RGB")
 
     fmt = SAVE_FORMAT[ext]
-    suffix = f".{ext if ext != 'jpg' else 'jpeg'}"
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        path = tmp.name
-
     save_kwargs: dict = {"format": fmt, "optimize": True}
     if fmt in ("JPEG", "WEBP"):
         save_kwargs["quality"] = quality
     elif fmt == "PNG":
         save_kwargs["compress_level"] = max(0, min(9, (100 - quality) // 10))
 
-    img.save(path, **save_kwargs)
+    buf = BytesIO()
+    img.save(buf, **save_kwargs)
+    compressed_bytes = buf.getvalue()
 
-    import os
-    compressed_size = os.path.getsize(path)
-
-    response = FileResponse(
-        path,
+    out_ext = ext if ext != "jpg" else "jpeg"
+    return Response(
+        content=compressed_bytes,
         media_type=MEDIA_TYPES[ext],
-        filename=f"optimized.{ext if ext != 'jpg' else 'jpeg'}",
+        headers={
+            "Content-Disposition": f'attachment; filename="optimized.{out_ext}"',
+            "X-Original-Size": str(original_size),
+            "X-Compressed-Size": str(len(compressed_bytes)),
+            "Access-Control-Expose-Headers": "X-Original-Size, X-Compressed-Size",
+        },
     )
-    response.headers["X-Original-Size"] = str(original_size)
-    response.headers["X-Compressed-Size"] = str(compressed_size)
-    response.headers["Access-Control-Expose-Headers"] = "X-Original-Size, X-Compressed-Size"
-    return response

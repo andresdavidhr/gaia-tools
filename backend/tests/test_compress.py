@@ -10,15 +10,15 @@ from app.utils.compress_utils import MAX_BYTES, create_tar, create_zip
 # --- unit: create_zip ---
 
 def test_create_zip_contains_files():
-    path = create_zip([("a.txt", b"hello"), ("b.txt", b"world")], password=None)
-    with zipfile.ZipFile(path) as zf:
+    data = create_zip([("a.txt", b"hello"), ("b.txt", b"world")], password=None)
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
         assert set(zf.namelist()) == {"a.txt", "b.txt"}
         assert zf.read("a.txt") == b"hello"
 
 
 def test_create_zip_with_password():
-    path = create_zip([("secret.txt", b"data")], password="pass123")
-    with zipfile.ZipFile(path) as zf:
+    data = create_zip([("secret.txt", b"data")], password="pass123")
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
         # Reading without password should raise BadZipFile or RuntimeError
         with pytest.raises((RuntimeError, zipfile.BadZipFile)):
             zf.read("secret.txt")
@@ -33,21 +33,20 @@ def test_create_zip_size_limit():
 # --- unit: create_tar ---
 
 def test_create_tar_plain():
-    path = create_tar([("a.txt", b"hello")], compression="")
-    with tarfile.open(path, "r") as tf:
-        member = tf.getmember("a.txt")
-        assert member.size == 5
+    data = create_tar([("a.txt", b"hello")], compression="")
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r") as tf:
+        assert tf.getmember("a.txt").size == 5
 
 
 def test_create_tar_gz():
-    path = create_tar([("f.txt", b"data")], compression="gz")
-    with tarfile.open(path, "r:gz") as tf:
+    data = create_tar([("f.txt", b"data")], compression="gz")
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
         assert tf.getmember("f.txt").size == 4
 
 
 def test_create_tar_bz2():
-    path = create_tar([("f.txt", b"data")], compression="bz2")
-    with tarfile.open(path, "r:bz2") as tf:
+    data = create_tar([("f.txt", b"data")], compression="bz2")
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:bz2") as tf:
         assert tf.getmember("f.txt").size == 4
 
 

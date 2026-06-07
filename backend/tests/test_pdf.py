@@ -49,18 +49,16 @@ def test_parse_pages_empty():
 def test_merge_pdfs_combines_pages():
     pdf_a = _make_pdf(2)
     pdf_b = _make_pdf(3)
-    path = merge_pdfs([("a.pdf", pdf_a), ("b.pdf", pdf_b)])
-    reader = PdfReader(path)
-    assert len(reader.pages) == 5
+    data = merge_pdfs([("a.pdf", pdf_a), ("b.pdf", pdf_b)])
+    assert len(PdfReader(io.BytesIO(data)).pages) == 5
 
 
 # --- unit: split_pdf ---
 
 def test_split_pdf_extracts_pages():
     pdf = _make_pdf(5)
-    path = split_pdf(pdf, "2-4")
-    reader = PdfReader(path)
-    assert len(reader.pages) == 3
+    data = split_pdf(pdf, "2-4")
+    assert len(PdfReader(io.BytesIO(data)).pages) == 3
 
 
 # --- API ---

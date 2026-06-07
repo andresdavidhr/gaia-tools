@@ -2,35 +2,31 @@ from __future__ import annotations
 
 import io
 import re
-import tempfile
 
 from pypdf import PdfReader, PdfWriter
 
 
-def merge_pdfs(files: list[tuple[str, bytes]]) -> str:
+def merge_pdfs(files: list[tuple[str, bytes]]) -> bytes:
     writer = PdfWriter()
     for _, data in files:
         reader = PdfReader(io.BytesIO(data))
         for page in reader.pages:
             writer.add_page(page)
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        writer.write(tmp)
-        return tmp.name
 
-
-def split_pdf(data: bytes, pages_expr: str) -> str:
+def split_pdf(data: bytes, pages_expr: str) -> bytes:
     reader = PdfReader(io.BytesIO(data))
     total = len(reader.pages)
     indices = _parse_pages(pages_expr, total)
-
     writer = PdfWriter()
     for i in indices:
         writer.add_page(reader.pages[i])
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        writer.write(tmp)
-        return tmp.name
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
 
 
 def _parse_pages(expr: str, total: int) -> list[int]:

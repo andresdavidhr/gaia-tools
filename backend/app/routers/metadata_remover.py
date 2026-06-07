@@ -1,9 +1,8 @@
-import tempfile
 from io import BytesIO
 
-from fastapi import APIRouter, File, UploadFile
-from fastapi.responses import FileResponse
-from PIL import ExifTags, Image
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import Response
+from PIL import Image
 
 router = APIRouter()
 
@@ -18,13 +17,17 @@ async def remove_metadata(file: UploadFile = File(...)):
     ext = (file.filename or "").rsplit(".", 1)[-1].lower() or "png"
     data = await file.read()
 
-    img = Image.open(BytesIO(data))
+    try:
+        img = Image.open(BytesIO(data))
+    except Exception:
+        raise HTTPException(422, "Cannot open image.")
 
-    # Count EXIF fields before removal
-    raw_exif = img._getexif() or {}
-    fields_removed = len(raw_exif)
+    try:
+        raw_exif = img._getexif() or {} if hasattr(img, "_getexif") else {}
+        fields_removed = len(raw_exif)
+    except Exception:
+        fields_removed = 0
 
-    # Strip by re-creating the image data without any metadata
     clean = Image.new(img.mode, img.size)
     clean.putdata(list(img.getdata()))
 
@@ -32,23 +35,18 @@ async def remove_metadata(file: UploadFile = File(...)):
     if fmt == "JPEG" and clean.mode in ("RGBA", "P"):
         clean = clean.convert("RGB")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
-        clean.save(tmp.name, format=fmt, optimize=True)
-        path = tmp.name
+    buf = BytesIO()
+    clean.save(buf, format=fmt, optimize=True)
+    clean_bytes = buf.getvalue()
 
-    import os
-    original_size   = len(data)
-    compressed_size = os.path.getsize(path)
-
-    response = FileResponse(
-        path,
+    return Response(
+        content=clean_bytes,
         media_type=MEDIA_TYPES.get(ext, "image/png"),
-        filename=f"clean.{ext}",
+        headers={
+            "Content-Disposition": f'attachment; filename="clean.{ext}"',
+            "X-Original-Size": str(len(data)),
+            "X-Cleaned-Size": str(len(clean_bytes)),
+            "X-Fields-Removed": str(fields_removed),
+            "Access-Control-Expose-Headers": "X-Original-Size, X-Cleaned-Size, X-Fields-Removed",
+        },
     )
-    response.headers["X-Original-Size"]   = str(original_size)
-    response.headers["X-Cleaned-Size"]    = str(compressed_size)
-    response.headers["X-Fields-Removed"]  = str(fields_removed)
-    response.headers["Access-Control-Expose-Headers"] = (
-        "X-Original-Size, X-Cleaned-Size, X-Fields-Removed"
-    )
-    return response

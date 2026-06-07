@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from app.utils.compress_utils import create_tar, create_zip
 
@@ -9,6 +9,13 @@ router = APIRouter()
 
 VALID_FORMATS = {"zip", "tar", "tar.gz", "tar.bz2"}
 TAR_COMPRESSION = {"tar": "", "tar.gz": "gz", "tar.bz2": "bz2"}
+
+MEDIA_TYPES = {
+    "zip":    "application/zip",
+    "tar":    "application/x-tar",
+    "tar.gz": "application/x-tar",
+    "tar.bz2":"application/x-tar",
+}
 
 
 @router.post("/")
@@ -31,17 +38,17 @@ async def compress(
 
     try:
         if fmt == "zip":
-            path = create_zip(file_data, password or None)
-            filename = "archive.zip"
-            media_type = "application/zip"
+            content = create_zip(file_data, password or None)
         else:
-            compression = TAR_COMPRESSION[fmt]
-            path = create_tar(file_data, compression)
-            filename = f"archive.{fmt}"
-            media_type = "application/x-tar"
+            content = create_tar(file_data, TAR_COMPRESSION[fmt])
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, f"Compression failed: {type(e).__name__}: {e}")
 
-    return FileResponse(path, media_type=media_type, filename=filename)
+    filename = f"archive.{fmt}"
+    return Response(
+        content=content,
+        media_type=MEDIA_TYPES[fmt],
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

@@ -1,10 +1,9 @@
-import tempfile
 from io import BytesIO
 
 import barcode
 from barcode.writer import ImageWriter
 from fastapi import APIRouter, Form, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 router = APIRouter()
 
@@ -23,13 +22,17 @@ async def generate(
         raise HTTPException(400, "Content cannot be empty.")
 
     try:
+        buf = BytesIO()
         writer = ImageWriter()
         bc_class = barcode.get_barcode_class(FORMATS[fmt])
         bc = bc_class(content.strip(), writer=writer)
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-            bc.write(tmp, options={"write_text": True, "quiet_zone": 2.5})
-            path = tmp.name
+        bc.write(buf, options={"write_text": True, "quiet_zone": 2.5})
+        png_bytes = buf.getvalue()
     except Exception as e:
         raise HTTPException(400, str(e))
 
-    return FileResponse(path, media_type="image/png", filename=f"barcode.png")
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Content-Disposition": 'attachment; filename="barcode.png"'},
+    )

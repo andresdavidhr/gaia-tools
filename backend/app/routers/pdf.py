@@ -1,7 +1,7 @@
 from typing import List
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from app.utils.pdf_utils import merge_pdfs, split_pdf
 
@@ -14,10 +14,14 @@ async def merge(files: List[UploadFile] = File(...)):
         raise HTTPException(400, "At least two PDF files are required.")
     file_data = [(f.filename or "file.pdf", await f.read()) for f in files]
     try:
-        path = merge_pdfs(file_data)
+        content = merge_pdfs(file_data)
     except Exception as e:
         raise HTTPException(400, str(e))
-    return FileResponse(path, media_type="application/pdf", filename="merged.pdf")
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="merged.pdf"'},
+    )
 
 
 @router.post("/split")
@@ -27,7 +31,11 @@ async def split(
 ):
     data = await file.read()
     try:
-        path = split_pdf(data, pages)
+        content = split_pdf(data, pages)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return FileResponse(path, media_type="application/pdf", filename="split.pdf")
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="split.pdf"'},
+    )
