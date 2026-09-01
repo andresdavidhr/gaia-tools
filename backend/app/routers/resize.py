@@ -3,6 +3,7 @@ from io import BytesIO
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from PIL import Image
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
 
@@ -27,6 +28,26 @@ def _encode(img: Image.Image, ext: str) -> tuple[bytes, str]:
     return buf.getvalue(), MEDIA_TYPES.get(ext, "image/png")
 
 
+def _do_resize(data: bytes, filename: str, width: int, height: int, keep_ratio: bool):
+    img, ext = _open_and_ext(data, filename)
+    if keep_ratio:
+        img = img.copy()
+        img.thumbnail((width, height), Image.LANCZOS)
+    else:
+        img = img.resize((width, height), Image.LANCZOS)
+    content, media_type = _encode(img, ext)
+    return content, media_type, ext
+
+
+def _do_crop(data: bytes, filename: str, x: int, y: int, width: int, height: int):
+    img, ext = _open_and_ext(data, filename)
+    if x + width > img.width or y + height > img.height:
+        raise ValueError(f"Crop area exceeds image bounds ({img.width}\u00d7{img.height}).")
+    img = img.crop((x, y, x + width, y + height))
+    content, media_type = _encode(img, ext)
+    return content, media_type, ext
+
+
 @router.post("/resize")
 async def resize_image(
     file: UploadFile = File(...),
@@ -37,13 +58,10 @@ async def resize_image(
     if width < 1 or height < 1:
         raise HTTPException(400, "Width and height must be positive.")
     data = await file.read()
-    img, ext = _open_and_ext(data, file.filename or "")
-    if keep_ratio:
-        img = img.copy()
-        img.thumbnail((width, height), Image.LANCZOS)
-    else:
-        img = img.resize((width, height), Image.LANCZOS)
-    content, media_type = _encode(img, ext)
+    # Decodificar/reescalar con Pillow es CPU-bound: fuera del event loop.
+    content, media_type, ext = await run_in_threadpool(
+        _do_resize, data, file.filename or "", width, height, keep_ratio
+    )
     return Response(
         content=content,
         media_type=media_type,
@@ -59,14 +77,15 @@ async def crop_image(
     width: int = Form(...),
     height: int = Form(...),
 ):
-    data = await file.read()
-    img, ext = _open_and_ext(data, file.filename or "")
     if x < 0 or y < 0 or width < 1 or height < 1:
         raise HTTPException(400, "Invalid crop coordinates.")
-    if x + width > img.width or y + height > img.height:
-        raise HTTPException(400, f"Crop area exceeds image bounds ({img.width}×{img.height}).")
-    img = img.crop((x, y, x + width, y + height))
-    content, media_type = _encode(img, ext)
+    data = await file.read()
+    try:
+        content, media_type, ext = await run_in_threadpool(
+            _do_crop, data, file.filename or "", x, y, width, height
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return Response(
         content=content,
         media_type=media_type,

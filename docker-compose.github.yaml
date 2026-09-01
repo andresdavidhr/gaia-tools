@@ -27,8 +27,10 @@ services:
         CMD ["./entrypoint.sh"]
     container_name: gaia-backend
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # Sin `ports`: el backend solo se alcanza por la red interna de Docker, a
+    # través del proxy /api/ de nginx, que es quien aplica client_max_body_size.
+    expose:
+      - "8000"
     volumes:
       - gaia-downloads:/tmp
     environment:

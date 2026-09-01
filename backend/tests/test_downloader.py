@@ -106,6 +106,20 @@ def test_info_endpoint_ok(client):
     assert r.json()["title"] == "Test Video"
 
 
+def test_download_removes_temp_dir(client, tmp_path):
+    """El mkdtemp de yt-dlp se acumulaba en el volumen /tmp del contenedor."""
+    work_dir = tmp_path / "dl"
+    work_dir.mkdir()
+    fake_file = work_dir / "song.mp3"
+    fake_file.write_bytes(b"fake audio")
+
+    with patch("app.routers.downloader.download_video", return_value=(str(fake_file), "song.mp3")):
+        r = client.post("/api/downloader/download", json={"url": "https://youtu.be/test", "format": "mp3"})
+
+    assert r.status_code == 200
+    assert not work_dir.exists()
+
+
 @pytest.mark.integration
 def test_download_real_mp3(client):
     """Descarga real de Baby Shark como MP3. Requiere red y ffmpeg."""

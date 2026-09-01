@@ -9,6 +9,7 @@ Then runs pytest.
 """
 
 import importlib.util
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -89,12 +90,12 @@ for req_name, module_name in PACKAGES.items():
     found = importlib.util.find_spec(module_name) is not None
     check(req_name, found, f"run: pip install -r backend/requirements.txt" if not found else "")
 
-# pypandoc is optional (only used by converter); warn but don't fail
-try:
-    import pypandoc  # noqa: F401
-    print(f"  {OK}  pypandoc")
-except ImportError:
-    print(f"  {WARN}  pypandoc  (optional — converter tool may fail without it)")
+# pandoc and ffmpeg are system binaries (installed in the image), not packages
+for binary, tool in (("pandoc", "document converter"), ("ffmpeg", "audio/video converter")):
+    if shutil.which(binary):
+        print(f"  {OK}  {binary} (system binary)")
+    else:
+        print(f"  {WARN}  {binary}  (optional \u2014 {tool} needs it)")
 
 
 # ── Summary ───────────────────────────────────────────────────────────────────

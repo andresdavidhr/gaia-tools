@@ -2,6 +2,7 @@ from typing import List
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from app.utils.pdf_utils import merge_pdfs, split_pdf
 
@@ -14,7 +15,7 @@ async def merge(files: List[UploadFile] = File(...)):
         raise HTTPException(400, "At least two PDF files are required.")
     file_data = [(f.filename or "file.pdf", await f.read()) for f in files]
     try:
-        content = merge_pdfs(file_data)
+        content = await run_in_threadpool(merge_pdfs, file_data)
     except Exception as e:
         raise HTTPException(400, str(e))
     return Response(
@@ -31,7 +32,7 @@ async def split(
 ):
     data = await file.read()
     try:
-        content = split_pdf(data, pages)
+        content = await run_in_threadpool(split_pdf, data, pages)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return Response(

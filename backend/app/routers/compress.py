@@ -2,6 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from app.utils.compress_utils import create_tar, create_zip
 
@@ -36,11 +37,12 @@ async def compress(
         data = await f.read()
         file_data.append((f.filename or "file", data))
 
+    # Comprimir es CPU-bound: fuera del event loop para no congelar la API.
     try:
         if fmt == "zip":
-            content = create_zip(file_data, password or None)
+            content = await run_in_threadpool(create_zip, file_data, password or None)
         else:
-            content = create_tar(file_data, TAR_COMPRESSION[fmt])
+            content = await run_in_threadpool(create_tar, file_data, TAR_COMPRESSION[fmt])
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:

@@ -3,9 +3,15 @@ import re
 import tempfile
 import yt_dlp
 
+# Sin esto, un servidor que deja la conexión abierta cuelga la descarga
+# indefinidamente y con ella el hilo que la atiende.
+SOCKET_TIMEOUT = 30
+RETRIES = 3
+
 
 def get_video_info(url: str) -> dict:
-    opts = {"quiet": True, "skip_download": True, "no_warnings": True}
+    opts = {"quiet": True, "skip_download": True, "no_warnings": True,
+            "socket_timeout": SOCKET_TIMEOUT, "retries": RETRIES}
     with yt_dlp.YoutubeDL(opts) as ydl:
         meta = ydl.extract_info(url, download=False)
     return {"title": meta.get("title", ""), "duration": meta.get("duration")}
@@ -28,6 +34,8 @@ def download_video(url: str, fmt: str, quality: str = "best", custom_filename: s
             "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": bitrate}],
             "prefer_ffmpeg": True,
             "quiet": True,
+            "socket_timeout": SOCKET_TIMEOUT,
+            "retries": RETRIES,
         }
     else:
         fmt_map = {
@@ -40,6 +48,8 @@ def download_video(url: str, fmt: str, quality: str = "best", custom_filename: s
             "merge_output_format": "mp4",
             "prefer_ffmpeg": True,
             "quiet": True,
+            "socket_timeout": SOCKET_TIMEOUT,
+            "retries": RETRIES,
         }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

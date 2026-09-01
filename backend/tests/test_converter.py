@@ -85,3 +85,31 @@ def test_api_document_unsupported_format(client):
     files = {"file": ("doc.txt", b"hello", "text/plain")}
     r = client.post("/api/convert/document", data=data, files=files)
     assert r.status_code == 400
+
+
+# --- Temp file cleanup (los temporales servidos se acumulaban en /tmp) ---
+
+def test_api_image_removes_temp_file(client, tmp_path):
+    out_file = tmp_path / "resultado.jpg"
+    out_file.write_bytes(b"fake jpeg")
+
+    with patch("app.routers.converter.convert_image", return_value=str(out_file)):
+        r = client.post("/api/convert/image",
+                        data={"target_format": "jpg"},
+                        files={"file": ("test.png", _make_png(), "image/png")})
+
+    assert r.status_code == 200
+    assert not out_file.exists()
+
+
+def test_api_video_removes_temp_file(client, tmp_path):
+    out_file = tmp_path / "resultado.mp4"
+    out_file.write_bytes(b"fake video")
+
+    with patch("app.routers.converter.convert_video", return_value=str(out_file)):
+        r = client.post("/api/convert/video",
+                        data={"target_format": "mp4"},
+                        files={"file": ("test.avi", b"fake avi", "video/x-msvideo")})
+
+    assert r.status_code == 200
+    assert not out_file.exists()

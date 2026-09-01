@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+import os
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.routers import (
     downloader, password, converter, qr, hash_gen,
@@ -9,12 +12,46 @@ from app.routers import (
 
 app = FastAPI(title="gaia-tools API", version="1.0.0")
 
+MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "100"))
+MAX_BODY_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+# En producción el frontend se sirve tras el mismo origen (nginx proxea /api/),
+# así que CORS solo hace falta para el dev server de Vite.
+CORS_ORIGINS = [
+    o.strip() for o in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173",
+    ).split(",") if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    """Rechaza cuerpos por encima de MAX_FILE_SIZE_MB antes de leerlos.
+
+    Se apoya en Content-Length, que envían todos los clientes normales. Una
+    petición chunked lo esquivaría: la barrera dura sigue siendo el
+    `client_max_body_size` de nginx, única vía de entrada al backend.
+    """
+    length = request.headers.get("content-length")
+    if length:
+        try:
+            if int(length) > MAX_BODY_BYTES:
+                return JSONResponse(
+                    {"detail": f"El fichero supera el límite de {MAX_FILE_SIZE_MB} MB."},
+                    status_code=413,
+                )
+        except ValueError:
+            return JSONResponse({"detail": "Content-Length inválido."}, status_code=400)
+    return await call_next(request)
+
 
 app.include_router(downloader.router, prefix="/api/downloader", tags=["downloader"])
 app.include_router(password.router, prefix="/api/password", tags=["password"])

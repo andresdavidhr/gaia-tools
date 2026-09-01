@@ -100,18 +100,29 @@ def test_api_ssl_empty_hostname(client):
 # HTTP Headers — API (mocked httpx)
 # ============================================================
 
+def _public_dns(*_args, **_kwargs):
+    """getaddrinfo que resuelve a una IP pública, sin tocar la red."""
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+
+def _private_dns(*_args, **_kwargs):
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.1", 0))]
+
+
 def test_api_headers_success(client):
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.url = "https://example.com"
     mock_response.headers = {"content-type": "text/html", "server": "nginx"}
+    mock_response.next_request = None
 
     mock_client = AsyncMock()
     mock_client.head.return_value = mock_response
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("app.routers.http_headers.httpx.AsyncClient", return_value=mock_client):
+    with patch("app.routers.http_headers.httpx.AsyncClient", return_value=mock_client), \
+         patch("app.routers.http_headers.socket.getaddrinfo", _public_dns):
         r = client.post("/api/headers/", json={"url": "https://example.com"})
 
     assert r.status_code == 200
@@ -128,7 +139,41 @@ def test_api_headers_timeout(client):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("app.routers.http_headers.httpx.AsyncClient", return_value=mock_client):
+    with patch("app.routers.http_headers.httpx.AsyncClient", return_value=mock_client), \
+         patch("app.routers.http_headers.socket.getaddrinfo", _public_dns):
+        r = client.post("/api/headers/", json={"url": "https://example.com"})
+
+    assert r.status_code == 400
+
+
+def test_api_headers_blocks_private_target(client):
+    """SSRF: el backend vive en la LAN, no debe sondear direcciones internas."""
+    with patch("app.routers.http_headers.socket.getaddrinfo", _private_dns):
+        r = client.post("/api/headers/", json={"url": "http://router.local"})
+
+    assert r.status_code == 400
+    assert "public" in r.json()["detail"].lower()
+
+
+def test_api_headers_blocks_private_redirect(client):
+    """Una redirección hacia una IP interna tampoco debe seguirse."""
+    redirect = MagicMock()
+    redirect.status_code = 302
+    redirect.url = "https://example.com"
+    redirect.headers = {}
+    redirect.next_request = MagicMock()
+    redirect.next_request.url = "http://192.168.1.1/admin"
+
+    mock_client = AsyncMock()
+    mock_client.head.return_value = redirect
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    def _dns(host, *_a, **_k):
+        return _private_dns() if host == "192.168.1.1" else _public_dns()
+
+    with patch("app.routers.http_headers.httpx.AsyncClient", return_value=mock_client), \
+         patch("app.routers.http_headers.socket.getaddrinfo", _dns):
         r = client.post("/api/headers/", json={"url": "https://example.com"})
 
     assert r.status_code == 400
